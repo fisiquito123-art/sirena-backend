@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIRENA — Reportar incidente</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6FA; --panel:#FFFFFF; --panel-2:#EEF2F8; --line:#DCE3ED;
+    --text:#152238; --muted:#5B6B84; --muted-2:#93A0B4;
+    --brand:#0B3D66; --brand-2:#124E80; --danger:#C6392F; --safe:#279065;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:24px 16px;}
+  .wrap{max-width:480px;margin:0 auto;}
+  header{display:flex;align-items:center;gap:10px;margin-bottom:20px;}
+  .mark{width:36px;height:36px;border-radius:9px;background:var(--brand);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  h1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:24px;color:var(--brand);letter-spacing:0.02em;}
+  .sub{font-size:11.5px;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.06em;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:0 8px 24px rgba(11,61,102,0.06);}
+  .field{margin-bottom:18px;}
+  label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:8px;}
+  .cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .cat-opt{border:1px solid var(--line);background:var(--panel-2);border-radius:10px;padding:11px;display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s;}
+  .cat-opt.selected{border-color:currentColor;background:#fff;box-shadow:0 2px 6px rgba(11,61,102,0.08);}
+  .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  textarea,input[type=text],input[type=number]{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:12px;}
+  textarea:focus,input:focus{outline:2px solid var(--brand);outline-offset:1px;}
+  .loc-row{display:flex;gap:8px;}
+  .btn-loc{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .loc-readout{font-family:monospace;font-size:12px;color:var(--muted);align-self:center;}
+  .loc-hint{font-size:11px;color:var(--muted-2);margin-top:7px;line-height:1.5;}
+  .mini-map{height:180px;border-radius:9px;overflow:hidden;margin-top:9px;border:1px solid var(--line);}
+  .count-field{display:none;}
+  .count-field.show{display:block;}
+  .file-btn{background:var(--panel-2);border:1px dashed var(--muted-2);border-radius:9px;padding:11px 14px;font-size:13px;color:var(--muted);cursor:pointer;display:inline-block;}
+  .submit{width:100%;background:var(--brand);color:#fff;border:none;border-radius:10px;padding:15px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;cursor:pointer;margin-top:6px;}
+  .submit:disabled{background:var(--muted-2);cursor:not-allowed;}
+  .msg{margin-top:16px;padding:12px 14px;border-radius:9px;font-size:13px;display:none;}
+  .msg.ok{background:rgba(39,144,101,0.1);color:var(--safe);display:block;}
+  .msg.err{background:rgba(198,57,47,0.1);color:var(--danger);display:block;}
+  footer{text-align:center;margin-top:18px;font-size:11px;color:var(--muted-2);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    <div><h1>SIRENA</h1><div class="sub">reportar incidente</div></div>
+  </header>
+  <div style="display:flex;gap:6px;margin-bottom:16px;">
+    <a href="/" style="font-size:12px;font-weight:600;color:#fff;background:var(--brand);text-decoration:none;padding:7px 12px;border-radius:8px;">Reportar</a>
+    <a href="/mapa.html" style="font-size:12px;font-weight:600;color:var(--muted);background:var(--panel-2);text-decoration:none;padding:7px 12px;border-radius:8px;">Ver mapa</a>
+    <a href="/moderar.html" style="font-size:12px;font-weight:600;color:var(--muted);background:var(--panel-2);text-decoration:none;padding:7px 12px;border-radius:8px;">Moderación</a>
+  </div>
+
+  <div class="card">
+    <div class="field">
+      <label>1. Tipo de incidente</label>
+      <div class="cat-grid" id="catGrid"></div>
+    </div>
+    <div class="field count-field" id="countField">
+      <label id="countLabel">Cantidad</label>
+      <input type="number" id="countInput" min="1" placeholder="Ej. 3">
+    </div>
+    <div class="field">
+      <label>2. Ubicación</label>
+      <div class="loc-row">
+        <button type="button" class="btn-loc" id="useGeo">📍 Usar mi ubicación</button>
+        <span class="loc-readout" id="locReadout">Sin ubicación</span>
+      </div>
+      <div class="loc-hint">O toca el mapa para marcar el punto exacto.</div>
+      <div class="mini-map" id="miniMap"></div>
+    </div>
+    <div class="field">
+      <label>3. Descripción</label>
+      <textarea id="descInput" rows="3" placeholder="Describe lo que está pasando..."></textarea>
+    </div>
+    <div class="field">
+      <label>4. Foto (opcional)</label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <label class="file-btn">📷 Adjuntar foto<input type="file" id="fileInput" accept="image/*" style="display:none"></label>
+        <img id="filePreview" style="width:44px;height:44px;border-radius:7px;object-fit:cover;display:none;">
+      </div>
+    </div>
+    <div class="field">
+      <label>Teléfono de contacto (opcional)</label>
+      <input type="text" id="phoneInput" placeholder="+51 9__ ___ ___">
+    </div>
+    <button class="submit" id="submitBtn" disabled>Enviar reporte</button>
+    <div class="msg" id="msg"></div>
+  </div>
+  <footer>Tu reporte se revisa antes de publicarse en el mapa.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const CATEGORIES = {
+  inundacion:  { label:'Inundación',        color:'#1D74C4' },
+  fallecido:   { label:'Fallecido',         color:'#C6392F', aggregated:true, countLabel:'N° de fallecidos' },
+  atrapado:    { label:'Herido / atrapado', color:'#DB7A2C', hasCount:true, countLabel:'Personas atrapadas' },
+  estructural: { label:'Daño estructural',  color:'#7B57B0' },
+  via:         { label:'Vía bloqueada',     color:'#B9860F' },
+  necesidad:   { label:'Necesidad urgente', color:'#158F76' }
+};
+let selectedCategory = null, pendingLoc = null, photoData = null;
+
+const catGrid = document.getElementById('catGrid');
+Object.entries(CATEGORIES).forEach(([key,cat]) => {
+  const opt = document.createElement('div');
+  opt.className = 'cat-opt';
+  opt.style.color = cat.color;
+  opt.innerHTML = `<span class="dot" style="background:${cat.color}"></span>${cat.label}`;
+  opt.addEventListener('click', () => {
+    selectedCategory = key;
+    [...catGrid.children].forEach(c=>c.classList.remove('selected'));
+    opt.classList.add('selected');
+    const cf = document.getElementById('countField');
+    if(cat.hasCount || cat.aggregated){ cf.classList.add('show'); document.getElementById('countLabel').textContent = cat.countLabel; }
+    else cf.classList.remove('show');
+    checkValid();
+  });
+  catGrid.appendChild(opt);
+});
+
+document.getElementById('useGeo').addEventListener('click', () => {
+  const readout = document.getElementById('locReadout');
+  if(!navigator.geolocation){ readout.textContent = 'No disponible'; return; }
+  readout.textContent = 'Obteniendo...';
+  navigator.geolocation.getCurrentPosition(
+    pos => { setLocation(pos.coords.latitude, pos.coords.longitude); if(map) map.setView([pos.coords.latitude,pos.coords.longitude],13); },
+    () => { readout.textContent = 'No se pudo obtener ubicación — toca el mapa'; }
+  );
+});
+
+function setLocation(lat,lng){
+  pendingLoc = {lat,lng};
+  document.getElementById('locReadout').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  if(map){
+    if(marker) map.removeLayer(marker);
+    marker = L.circleMarker([lat,lng], {radius:8,color:'#C6392F',fillColor:'#C6392F',fillOpacity:0.85,weight:2}).addTo(map);
+  }
+  checkValid();
+}
+
+let map = null, marker = null;
+try{
+  if(typeof L === 'undefined') throw new Error('Leaflet no cargó');
+  map = L.map('miniMap', { zoomControl:true }).setView([-10.35,-76.98], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'&copy; OpenStreetMap contributors', maxZoom:19 }).addTo(map);
+  map.on('click', (e) => setLocation(e.latlng.lat, e.latlng.lng));
+}catch(err){
+  const el = document.getElementById('miniMap');
+  el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:10px;text-align:center;color:#93A0B4;font-size:11.5px;">Mapa no disponible — usa "Usar mi ubicación".</div>';
+}
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, 320/img.width);
+      canvas.width = img.width*scale; canvas.height = img.height*scale;
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      photoData = canvas.toDataURL('image/jpeg', 0.6);
+      const preview = document.getElementById('filePreview');
+      preview.src = photoData; preview.style.display = 'block';
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+const descInput = document.getElementById('descInput');
+descInput.addEventListener('input', checkValid);
+function checkValid(){
+  document.getElementById('submitBtn').disabled = !(selectedCategory && pendingLoc && descInput.value.trim().length > 3);
+}
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('msg');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  const cfg = CATEGORIES[selectedCategory];
+  const body = {
+    categoria: selectedCategory,
+    lat: pendingLoc.lat, lng: pendingLoc.lng,
+    descripcion: descInput.value.trim(),
+    telefono: document.getElementById('phoneInput').value.trim() || null,
+    foto: photoData || null
+  };
+  if(cfg.hasCount || cfg.aggregated){
+    const c = document.getElementById('countInput').value;
+    if(c) body.cantidad = parseInt(c,10);
+  }
+  try{
+    const res = await fetch('/api/reportes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if(!res.ok) throw new Error((await res.json()).error || 'Error al enviar');
+    msg.className = 'msg ok'; msg.textContent = 'Reporte enviado. Será revisado antes de publicarse.';
+    btn.textContent = 'Enviar reporte'; btn.disabled = true;
+    selectedCategory = null; pendingLoc = null; photoData = null;
+    [...catGrid.children].forEach(c=>c.classList.remove('selected'));
+    document.getElementById('countField').classList.remove('show');
+    document.getElementById('filePreview').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    descInput.value=''; document.getElementById('phoneInput').value='';
+    document.getElementById('locReadout').textContent = 'Sin ubicación';
+    if(map && marker){ map.removeLayer(marker); marker = null; }
+  }catch(err){
+    msg.className = 'msg err'; msg.textContent = err.message;
+    btn.disabled = false; btn.textContent = 'Enviar reporte';
+  }
+});
+</script>
+</body>
+</html>
