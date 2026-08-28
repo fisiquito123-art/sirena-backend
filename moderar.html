@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIRENA — Moderación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6FA; --panel:#FFFFFF; --panel-2:#EEF2F8; --line:#DCE3ED;
+    --text:#152238; --muted:#5B6B84; --muted-2:#93A0B4;
+    --brand:#0B3D66; --danger:#C6392F; --safe:#279065; --pending:#D69A1F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+  .topbar{height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--line);}
+  h1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;color:var(--brand);}
+  .logout{font-size:12px;font-weight:600;color:var(--muted);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;}
+  .login-screen{max-width:380px;margin:80px auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px;}
+  .login-screen h1{margin-bottom:6px;}
+  .login-screen p{font-size:12.5px;color:var(--muted);margin-bottom:18px;}
+  .hint{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--muted);margin-bottom:16px;}
+  label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:8px;}
+  input{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:14px;margin-bottom:14px;}
+  .btn{width:100%;background:var(--brand);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer;}
+  .err{color:var(--danger);font-size:12px;margin-top:10px;display:none;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:20px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--pending);border-radius:12px;padding:14px;}
+  .card.aprobado{border-left-color:var(--safe);opacity:0.75;}
+  .card.descartado{border-left-color:var(--muted-2);opacity:0.45;}
+  .cat{font-size:10.5px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:6px;display:inline-block;margin-bottom:8px;}
+  .desc{font-size:13px;margin-bottom:8px;line-height:1.5;}
+  .meta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted-2);margin-bottom:10px;}
+  .actions{display:flex;gap:6px;}
+  .btn-mini{flex:1;font-size:11px;font-weight:700;padding:7px 0;border-radius:7px;border:none;cursor:pointer;text-transform:uppercase;}
+  .btn-approve{background:rgba(39,144,101,0.12);color:var(--safe);}
+  .btn-reject{background:rgba(91,107,132,0.1);color:var(--muted);}
+  .empty{text-align:center;padding:60px;color:var(--muted-2);}
+  #app{display:none;}
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <h1>SIRENA</h1>
+  <p>Panel de moderación — ingresa para revisar reportes.</p>
+  <div class="hint">Prototipo de prueba — usuario: <b>moderador</b> · contraseña: <b>demo2026</b> (o las que configuraste en variables de entorno del servidor).</div>
+  <label>Usuario</label>
+  <input type="text" id="loginUser">
+  <label>Contraseña</label>
+  <input type="password" id="loginPass">
+  <button class="btn" id="loginBtn">Ingresar</button>
+  <div class="err" id="loginErr">Usuario o contraseña incorrectos.</div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <h1>SIRENA · Moderación</h1>
+    <a href="/" style="font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;margin-left:16px;">Reportar</a>
+    <a href="/mapa.html" style="font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;margin-left:12px;margin-right:auto;">Ver mapa</a>
+    <a id="exportCsv" href="#" style="font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;margin-right:12px;">⬇ Exportar CSV</a>
+    <a id="exportDb" href="#" style="font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;margin-right:14px;">⬇ Descargar .db</a>
+    <button class="logout" id="logoutBtn">Cerrar sesión</button>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const CATEGORIES = {
+  inundacion:{label:'Inundación',color:'#1D74C4'}, fallecido:{label:'Fallecido',color:'#C6392F'},
+  atrapado:{label:'Herido / atrapado',color:'#DB7A2C'}, estructural:{label:'Daño estructural',color:'#7B57B0'},
+  via:{label:'Vía bloqueada',color:'#B9860F'}, necesidad:{label:'Necesidad urgente',color:'#158F76'}
+};
+let token = sessionStorage.getItem('sirena_token');
+
+function showApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadReports();
+}
+if(token) showApp();
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const usuario = document.getElementById('loginUser').value.trim();
+  const contrasena = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginErr');
+  try{
+    const res = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({usuario,contrasena}) });
+    if(!res.ok) throw new Error();
+    const data = await res.json();
+    token = data.token;
+    sessionStorage.setItem('sirena_token', token);
+    err.style.display = 'none';
+    showApp();
+  }catch(e){ err.style.display = 'block'; }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/logout', { method:'POST', headers:{Authorization:'Bearer '+token} });
+  sessionStorage.removeItem('sirena_token');
+  location.reload();
+});
+
+async function downloadFile(url, filename){
+  const res = await fetch(url, { headers:{Authorization:'Bearer '+token} });
+  if(!res.ok){ alert('No se pudo descargar el archivo.'); return; }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+document.getElementById('exportCsv').addEventListener('click', (e) => { e.preventDefault(); downloadFile('/api/exportar/csv', 'reportes.csv'); });
+document.getElementById('exportDb').addEventListener('click', (e) => { e.preventDefault(); downloadFile('/api/exportar/db', 'reportes.db'); });
+
+async function loadReports(){
+  const grid = document.getElementById('grid');
+  const res = await fetch('/api/reportes', { headers:{Authorization:'Bearer '+token} });
+  if(res.status === 401){ sessionStorage.removeItem('sirena_token'); location.reload(); return; }
+  const rows = await res.json();
+  if(rows.length === 0){ grid.innerHTML = '<div class="empty">Sin reportes todavía.</div>'; return; }
+  grid.innerHTML = '';
+  rows.forEach(r => {
+    const cat = CATEGORIES[r.categoria] || {label:r.categoria, color:'#333'};
+    const card = document.createElement('div');
+    card.className = 'card ' + r.estado;
+    card.innerHTML = `
+      <div class="cat" style="background:${cat.color}22;color:${cat.color}">${cat.label}</div>
+      <div class="desc">${escapeHtml(r.descripcion || '')}</div>
+      ${r.cantidad ? `<div class="desc">Cantidad: <b>${r.cantidad}</b></div>` : ''}
+      <div class="meta">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)} · ${new Date(r.creado_en).toLocaleString('es-PE')} · ${r.estado}</div>
+      ${r.estado === 'pendiente' ? `
+        <div class="actions">
+          <button class="btn-mini btn-approve" data-a="aprobar" data-id="${r.id}">Aprobar</button>
+          <button class="btn-mini btn-reject" data-a="descartar" data-id="${r.id}">Descartar</button>
+        </div>` : ''}
+    `;
+    grid.appendChild(card);
+  });
+  grid.querySelectorAll('[data-a]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await fetch(`/api/reportes/${btn.dataset.id}/${btn.dataset.a}`, { method:'POST', headers:{Authorization:'Bearer '+token} });
+      loadReports();
+    });
+  });
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+</script>
+</body>
+</html>
