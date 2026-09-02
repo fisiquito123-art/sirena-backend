@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIRENA — Feed de reportes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6FA; --panel:#FFFFFF; --panel-2:#EEF2F8; --line:#DCE3ED;
+    --text:#152238; --muted:#5B6B84; --muted-2:#93A0B4;
+    --brand:#0B3D66; --danger:#C6392F; --safe:#279065; --pending:#D69A1F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+  .topbar{height:58px;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--panel);border-bottom:1px solid var(--line);}
+  .mark{width:30px;height:30px;border-radius:8px;background:var(--brand);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  h1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;color:var(--brand);}
+  nav{display:flex;gap:6px;margin-left:6px;}
+  nav a{font-size:12.5px;font-weight:600;color:var(--muted);text-decoration:none;padding:7px 12px;border-radius:8px;}
+  nav a:hover{background:var(--panel-2);color:var(--text);}
+  nav a.active{background:var(--brand);color:#fff;}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 60px;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+  select{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;font-family:'Inter',sans-serif;color:var(--text);}
+  .count{font-size:11.5px;color:var(--muted-2);font-family:'JetBrains Mono',monospace;margin-bottom:14px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px;margin-bottom:12px;}
+  .card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+  .cat{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:3px 9px;border-radius:6px;}
+  .evento-tag{font-size:10.5px;font-weight:600;color:var(--muted);background:var(--panel-2);padding:3px 9px;border-radius:6px;}
+  .desc{font-size:13.5px;line-height:1.55;margin-bottom:8px;}
+  .photo{width:100%;max-height:220px;object-fit:cover;border-radius:9px;margin-bottom:8px;}
+  .meta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted-2);}
+  .empty{text-align:center;padding:70px 20px;color:var(--muted-2);font-size:13px;line-height:1.6;}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    <h1>SIRENA</h1>
+    <nav>
+      <a href="/">Reportar</a>
+      <a href="/feed.html" class="active">Feed</a>
+      <a href="/mapa.html">Mapa</a>
+      <a href="/moderar.html">Moderación</a>
+    </nav>
+  </div>
+  <div class="wrap">
+    <div class="filters">
+      <select id="filtroCategoria">
+        <option value="">Todas las categorías</option>
+      </select>
+      <select id="filtroEvento">
+        <option value="">Todos los eventos</option>
+      </select>
+    </div>
+    <div class="count" id="count"></div>
+    <div id="lista"></div>
+  </div>
+
+<script>
+  const CATEGORIES = {
+    inundacion:  { label:'Inundación',        color:'#1D74C4' },
+    fallecido:   { label:'Fallecido',         color:'#C6392F' },
+    atrapado:    { label:'Herido / atrapado', color:'#DB7A2C' },
+    estructural: { label:'Daño estructural',  color:'#7B57B0' },
+    via:         { label:'Vía bloqueada',     color:'#B9860F' },
+    necesidad:   { label:'Necesidad urgente', color:'#158F76' }
+  };
+
+  const filtroCategoria = document.getElementById('filtroCategoria');
+  const filtroEvento = document.getElementById('filtroEvento');
+
+  Object.entries(CATEGORIES).forEach(([key,cat]) => {
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = cat.label;
+    filtroCategoria.appendChild(opt);
+  });
+
+  async function cargarEventos(){
+    try{
+      const res = await fetch('/api/eventos');
+      const eventos = await res.json();
+      eventos.forEach(ev => {
+        const opt = document.createElement('option');
+        opt.value = ev.id; opt.textContent = ev.nombre;
+        filtroEvento.appendChild(opt);
+      });
+    }catch(e){}
+  }
+
+  function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+  async function cargarFeed(){
+    const params = new URLSearchParams();
+    if(filtroCategoria.value) params.set('categoria', filtroCategoria.value);
+    if(filtroEvento.value) params.set('evento', filtroEvento.value);
+    const res = await fetch('/api/feed?' + params.toString());
+    const reportes = await res.json();
+    const lista = document.getElementById('lista');
+    document.getElementById('count').textContent = `${reportes.length} reporte(s) verificado(s)`;
+
+    if(reportes.length === 0){
+      lista.innerHTML = '<div class="empty">No hay reportes verificados con estos filtros todavía.</div>';
+      return;
+    }
+
+    lista.innerHTML = reportes.map(r => {
+      const cat = CATEGORIES[r.categoria] || { label:r.categoria, color:'#333' };
+      const foto = r.foto ? `<img class="photo" src="${r.foto}">` : '';
+      const eventoTag = r.evento_nombre ? `<span class="evento-tag">📌 ${escapeHtml(r.evento_nombre)}</span>` : '';
+      const cantidad = r.cantidad ? `<div class="desc">Cantidad: <b>${r.cantidad}</b></div>` : '';
+      return `
+        <div class="card">
+          <div class="card-top">
+            <span class="cat" style="background:${cat.color}22;color:${cat.color}">${cat.label}</span>
+            ${eventoTag}
+          </div>
+          ${foto}
+          <div class="desc">${escapeHtml(r.descripcion)}</div>
+          ${cantidad}
+          <div class="meta">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)} · ${new Date(r.creado_en).toLocaleString('es-PE')}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  filtroCategoria.addEventListener('change', cargarFeed);
+  filtroEvento.addEventListener('change', cargarFeed);
+
+  cargarEventos().then(cargarFeed);
+  setInterval(cargarFeed, 10000);
+</script>
+</body>
+</html>

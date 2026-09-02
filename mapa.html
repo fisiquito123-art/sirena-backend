@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIRENA — Mapa de reportes</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6FA; --panel:#FFFFFF; --panel-2:#EEF2F8; --line:#DCE3ED;
+    --text:#152238; --muted:#5B6B84; --muted-2:#93A0B4;
+    --brand:#0B3D66; --danger:#C6392F; --safe:#279065;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{font-family:'Inter',sans-serif;color:var(--text);}
+  .topbar{
+    height:58px;display:flex;align-items:center;gap:16px;padding:0 18px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:20;
+  }
+  .brand{display:flex;align-items:center;gap:9px;}
+  .mark{width:30px;height:30px;border-radius:8px;background:var(--brand);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  h1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;color:var(--brand);}
+  nav{display:flex;gap:6px;margin-left:10px;}
+  nav a{
+    font-size:12.5px;font-weight:600;color:var(--muted);text-decoration:none;
+    padding:7px 12px;border-radius:8px;
+  }
+  nav a:hover{background:var(--panel-2);color:var(--text);}
+  nav a.active{background:var(--brand);color:#fff;}
+  .status{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:7px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--safe);}
+  #map{position:absolute;top:58px;left:0;right:0;bottom:0;background:#E9EEF4;}
+  .legend{
+    position:absolute;bottom:16px;left:16px;background:rgba(255,255,255,0.95);
+    border:1px solid var(--line);border-radius:10px;padding:11px 13px;z-index:10;
+    font-size:11px;display:flex;flex-direction:column;gap:6px;box-shadow:0 4px 16px rgba(11,61,102,0.08);
+  }
+  .legend-item{display:flex;align-items:center;gap:7px;color:var(--muted);cursor:pointer;user-select:none;}
+  .legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .empty-banner{
+    position:absolute;top:74px;left:50%;transform:translateX(-50%);z-index:10;
+    background:rgba(255,255,255,0.96);border:1px solid var(--line);border-radius:10px;
+    padding:10px 16px;font-size:12.5px;color:var(--muted);box-shadow:0 4px 16px rgba(11,61,102,0.08);
+    display:none;
+  }
+  .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border-radius:10px;}
+  .pop-cat{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px;}
+  .pop-desc{font-size:12.5px;line-height:1.5;margin-bottom:6px;}
+  .pop-meta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+      <h1>SIRENA</h1>
+    </div>
+    <nav>
+      <a href="/">Reportar</a>
+      <a href="/feed.html">Feed</a>
+      <a href="/mapa.html" class="active">Mapa</a>
+      <a href="/moderar.html">Moderación</a>
+    </nav>
+    <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">actualizando...</span></div>
+  </div>
+  <div id="map"></div>
+  <div class="empty-banner" id="emptyBanner">Todavía no hay reportes aprobados. Envía uno desde "Reportar" y apruébalo en "Moderación".</div>
+  <div class="legend" id="legend"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  let CATEGORIES = {};
+  let activeCats = new Set();
+  let mapAvailable = true;
+  let map = null;
+  let markersLayer = null;
+
+  async function initMap(){
+    let center = [-10.35, -76.98], zoom = 7;
+    try{
+      const cfg = await (await fetch('/api/config')).json();
+      center = [cfg.map_lat, cfg.map_lng];
+      zoom = cfg.map_zoom;
+    }catch(e){}
+    try{
+      if(typeof L === 'undefined') throw new Error('Leaflet no cargó');
+      map = L.map('map').setView(center, zoom);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:'&copy; OpenStreetMap contributors', maxZoom:19
+      }).addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+    }catch(err){
+      mapAvailable = false;
+      document.getElementById('map').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:#5B6B84;font-size:13px;">No se pudo cargar el mapa (Leaflet no respondió). Revisa tu conexión a internet.</div>';
+    }
+  }
+
+  async function cargarCategorias(){
+    try{
+      const res = await fetch('/api/categorias');
+      const cats = await res.json();
+      cats.forEach(c => { CATEGORIES[c.clave] = { label: c.etiqueta, color: c.color }; activeCats.add(c.clave); });
+    }catch(e){}
+    renderLegend();
+  }
+
+  function renderLegend(){
+    const legendEl = document.getElementById('legend');
+    legendEl.innerHTML = '';
+    Object.entries(CATEGORIES).forEach(([key, cat]) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.style.opacity = activeCats.has(key) ? '1' : '0.4';
+      item.innerHTML = `<span class="legend-dot" style="background:${cat.color}"></span>${cat.label}`;
+      item.addEventListener('click', () => {
+        if(activeCats.has(key)) activeCats.delete(key); else activeCats.add(key);
+        renderLegend();
+        refresh();
+      });
+      legendEl.appendChild(item);
+    });
+  }
+
+  function catIcon(catKey){
+    const cat = CATEGORIES[catKey] || { color:'#333' };
+    return L.divIcon({
+      className:'',
+      html:`<div style="width:22px;height:22px;border-radius:50%;background:${cat.color};box-shadow:0 2px 8px rgba(11,61,102,0.35);border:2px solid #fff;"></div>`,
+      iconSize:[22,22], iconAnchor:[11,11]
+    });
+  }
+
+  let ultimoGeo = null;
+
+  async function refresh(){
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    try{
+      if(!ultimoGeo){
+        const res = await fetch('/reportes.geojson', { cache:'no-store' });
+        if(!res.ok) throw new Error('Error del servidor');
+        ultimoGeo = await res.json();
+      }
+      const geo = ultimoGeo;
+      const visibles = geo.features.filter(f => activeCats.has(f.properties.categoria));
+
+      document.getElementById('emptyBanner').style.display = geo.features.length === 0 ? 'block' : 'none';
+
+      if(mapAvailable){
+        markersLayer.clearLayers();
+        visibles.forEach(f => {
+          const p = f.properties;
+          const cat = CATEGORIES[p.categoria] || { label:p.categoria, color:'#333' };
+          const popupHtml = `
+            <div class="pop-cat" style="color:${cat.color}">${cat.label}</div>
+            <div class="pop-desc">${escapeHtml(p.description || '')}</div>
+            ${p.cantidad ? `<div class="pop-meta">Cantidad: ${p.cantidad}</div>` : ''}
+            <div class="pop-meta">${new Date(p.fecha).toLocaleString('es-PE')}</div>
+          `;
+          if(f.geometry.type === 'Polygon'){
+            const layer = L.geoJSON(f.geometry, { style: { color: cat.color, fillColor: cat.color, fillOpacity: 0.3, weight: 2 } });
+            layer.bindPopup(popupHtml);
+            layer.addTo(markersLayer);
+          } else {
+            const [lng, lat] = f.geometry.coordinates;
+            const marker = L.marker([lat, lng], { icon: catIcon(p.categoria) });
+            marker.bindPopup(popupHtml);
+            marker.addTo(markersLayer);
+          }
+        });
+      }
+
+      statusDot.style.background = 'var(--safe)';
+      statusText.textContent = `${visibles.length} de ${geo.features.length} reporte(s) · actualizado ${new Date().toLocaleTimeString('es-PE')}`;
+    }catch(err){
+      statusDot.style.background = 'var(--danger)';
+      statusText.textContent = 'No se pudo conectar con el servidor';
+    }
+  }
+
+  function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+  cargarCategorias().then(() => initMap()).then(refresh);
+  setInterval(() => { ultimoGeo = null; refresh(); }, 8000); // vuelve a pedir datos frescos cada 8 segundos
+</script>
+</body>
+</html>
